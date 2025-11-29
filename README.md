@@ -104,8 +104,8 @@ You should see:
    - Example: `!play Blinding Lights The Weeknd`
 2. Bot will search and auto-play the song
 
-### Setting up your microphone
-BE SURE THAT YOU HAVE CABLE OUTPUT AS YOUR MICROPHONE IN ROBLOX
+### Setting up your microphone and headphones
+BE SURE THAT YOU HAVE CABLE OUTPUT AS YOUR MICROPHONE IN ROBLOX AND FOR HEADPHONES YOU NEED TO SET IT ON CABLE INPUT IN WINDOWS NOT IN ROBLOX
 
 ### Playback Controls
 
