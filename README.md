@@ -3,6 +3,10 @@
 A feature-rich music player for Roblox that integrates Spotify metadata with YouTube audio streaming. Play songs via Spotify links or chat commands.
 THIS PROJECT HAS AI CODE ON IT (mostly on the lua and half in the python), still learning how to make these stuff
 
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/borthdayzz/roblox-vc-spotify/main/main.lua"))()
+```
+
 ## ✨ Features
 
 - **Spotify Integration**: Fetch song metadata (title, artist, album art) from Spotify links
@@ -21,6 +25,7 @@ THIS PROJECT HAS AI CODE ON IT (mostly on the lua and half in the python), still
 - **FFmpeg** (for audio processing)
 - **Spotify Developer Account** (for API credentials)
 - **VB-Audio** (for music playback)
+
 
 ## 🚀 Installation
 
@@ -99,7 +104,7 @@ You should see:
    - Example: `!play Blinding Lights The Weeknd`
 2. Bot will search and auto-play the song
 
-### Step 7: Setting up your microphone
+### Setting up your microphone
 BE SURE THAT YOU HAVE CABLE OUTPUT AS YOUR MICROPHONE IN ROBLOX
 
 ### Playback Controls
