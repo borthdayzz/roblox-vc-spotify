@@ -21,17 +21,6 @@ mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 
-local shadow = Instance.new("Frame")
-shadow.Name = "Shadow"
-shadow.Size = UDim2.new(0, 504, 0, 354)
-shadow.Position = mainFrame.Position + UDim2.new(0, 3, 0, 4)
-shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-shadow.BackgroundTransparency = 0.85
-shadow.ZIndex = mainFrame.ZIndex - 1
-shadow.Parent = screenGui
-local shadowCorner = Instance.new("UICorner", shadow)
-shadowCorner.CornerRadius = UDim.new(0, 12)
-
 mainFrame.Size = UDim2.new(0, 500, 0, 350)
 mainFrame.Position = UDim2.new(0.5, -250, 0.5, -175)
 mainFrame.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
@@ -344,6 +333,7 @@ creditsModal.BorderSizePixel = 0
 creditsModal.Parent = screenGui
 creditsModal.Visible = false
 creditsModal.ZIndex = 100
+
 local creditsCornerBg = Instance.new("UICorner", creditsModal)
 creditsCornerBg.CornerRadius = UDim.new(0, 12)
 local creditsStrokeBg = Instance.new("UIStroke", creditsModal)
@@ -351,7 +341,6 @@ creditsStrokeBg.Color = Color3.fromRGB(45, 45, 45)
 creditsStrokeBg.Transparency = 0.7
 creditsStrokeBg.Thickness = 1
 
--- Credits Header
 local creditsHeader = Instance.new("Frame", creditsModal)
 creditsHeader.Name = "Header"
 creditsHeader.Size = UDim2.new(1, 0, 0, 40)
@@ -382,49 +371,10 @@ closeBtn.TextSize = 14
 local closeBtnCorner = Instance.new("UICorner", closeBtn)
 closeBtnCorner.CornerRadius = UDim.new(0, 6)
 
-local creditsContent = Instance.new("TextLabel", creditsModal)
-creditsContent.Name = "Content"
-creditsContent.Size = UDim2.new(1, -20, 1, -60)
-creditsContent.Position = UDim2.new(0, 10, 0, 50)
-creditsContent.BackgroundTransparency = 1
-creditsContent.Text = "🎵 Spotify Music Bot\n\nCreated by: borthdayzz\n\nFeatures:\n• Spotify Integration\n• Queue System\n• Play/Pause/Stop\n• Chat Commands\n• Modern UI\n\nv1.0"
-creditsContent.TextColor3 = Color3.fromRGB(220, 220, 220)
-creditsContent.Font = Enum.Font.Gotham
-creditsContent.TextSize = 11
-creditsContent.TextXAlignment = Enum.TextXAlignment.Center
-creditsContent.TextYAlignment = Enum.TextYAlignment.Top
-creditsContent.TextWrapped = true
-
-creditsButton.MouseEnter:Connect(function()
-	creditsButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-end)
-creditsButton.MouseLeave:Connect(function()
-	creditsButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-end)
-
-creditsButton.MouseButton1Click:Connect(function()
-	creditsModal.Visible = not creditsModal.Visible
-end)
-
 closeBtn.MouseButton1Click:Connect(function()
-	creditsModal.Visible = false
+    creditsModal.Visible = false
 end)
 
-local inputService = game:GetService("UserInputService")
-inputService.InputBegan:Connect(function(input, gameProcessed)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		if creditsModal.Visible then
-			local mousePos = inputService:GetMouseLocation()
-			local modalPos = creditsModal.AbsolutePosition
-			local modalSize = creditsModal.AbsoluteSize
-			
-			if not (mousePos.X >= modalPos.X and mousePos.X <= modalPos.X + modalSize.X and
-					mousePos.Y >= modalPos.Y and mousePos.Y <= modalPos.Y + modalSize.Y) then
-				creditsModal.Visible = false
-			end
-		end
-	end
-end)
 
 local function addToQueue(songData)
 	table.insert(songQueue, songData)
