@@ -56,7 +56,7 @@ ffplay -version
 2. Log in or create a Spotify account
 3. Create a new app
 4. Copy your **Client ID** and **Client Secret**
-5. Open `spotify_server.py` and update:
+5. Open `spotify_server.py` and `spotify_backend.py`and update:
 ```python
 SPOTIFY_CLIENT_ID = "your_client_id_here"
 SPOTIFY_CLIENT_SECRET = "your_client_secret_here"
