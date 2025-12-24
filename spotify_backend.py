@@ -4,7 +4,25 @@ import subprocess
 import sys
 from pathlib import Path
 import requests
+import argparse
 from urllib.parse import urlparse, parse_qs
+import shutil
+from pathlib import Path
+
+try:
+	from dotenv import load_dotenv
+	load_dotenv()
+except Exception:
+	env_path = Path(__file__).parent / ".env"
+	if env_path.exists():
+		with open(env_path, "r", encoding="utf-8") as f:
+			for line in f:
+				line = line.strip()
+				if not line or line.startswith("#"):
+					continue
+				if "=" in line:
+					k, v = line.split("=", 1)
+					os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 try:
 	import spotipy
@@ -14,20 +32,24 @@ except ImportError:
 	print("Install required packages: pip install spotipy requests yt-dlp")
 	sys.exit(1)
 
-WORKSPACE_FOLDER = Path(__file__).parent / "workspace"
+WORKSPACE_FOLDER = Path(__file__).parent / "fart"
+WORKSPACE_FOLDER.mkdir(parents=True, exist_ok=True)
 
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID") or os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET") or os.getenv("SPOTIFY_CLIENT_SECRET")
 
-WORKSPACE_FOLDER.mkdir(exist_ok=True)
+def check_dependencies():
+	"""Ensure required external executables are available for playback."""
+	if shutil.which("ffplay") is None and shutil.which("ffmpeg") is None:
+		print("Warning: ffplay/ffmpeg not found in PATH. Playback via this script may fail.")
 
-SPOTIFY_CLIENT_ID = "PLACE_CLIENT_ID_HERE"
-SPOTIFY_CLIENT_SECRET = "PLACE_CLIENT_SECRET_HERE"
+check_dependencies()
 
-def get_spotify_client():
-	"""Initialize Spotify client"""
-	auth_manager = SpotifyClientCredentials(
-		client_id=SPOTIFY_CLIENT_ID,
-		client_secret=SPOTIFY_CLIENT_SECRET
-	)
+def get_spotify_client_with_creds(client_id, client_secret):
+	"""Return a Spotify client initialized with provided credentials."""
+	if not client_id or not client_secret:
+		raise ValueError("Missing Spotify credentials")
+	auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
 	return spotipy.Spotify(auth_manager=auth_manager)
 
 def extract_track_id(spotify_link):
@@ -38,10 +60,14 @@ def extract_track_id(spotify_link):
 			return parsed_url.path.split("/")[-1].split("?")[0]
 	return None
 
-def fetch_song_data(spotify_link):
+def fetch_song_data(spotify_link, client_id=None, client_secret=None):
 	"""Fetch song metadata from Spotify"""
 	try:
-		sp = get_spotify_client()
+		if client_id or client_secret:
+			sp = get_spotify_client_with_creds(client_id or SPOTIFY_CLIENT_ID, client_secret or SPOTIFY_CLIENT_SECRET)
+		else:
+			sp = get_spotify_client_with_creds(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+		
 		track_id = extract_track_id(spotify_link)
 		
 		if not track_id:
@@ -113,15 +139,27 @@ def play_through_microphone(audio_path):
 		print(f"Playback error: {e}")
 		return False
 
+def parse_args():
+	parser = argparse.ArgumentParser()
+	parser.add_argument("spotify_link", nargs="?", help="Spotify track link")
+	parser.add_argument("--client-id", help="Spotify client id (overrides env)")
+	parser.add_argument("--client-secret", help="Spotify client secret (overrides env)")
+	return parser.parse_args()
+
 def main():
 	"""Main function"""
-	if len(sys.argv) < 2:
-		print("Usage: python spotify_backend.py <spotify_link>")
+	args = parse_args()
+	if not args.spotify_link:
+		print("Usage: python spotify_backend.py <spotify_link> [--client-id CLIENT_ID --client-secret CLIENT_SECRET]")
+		return
+	spotify_link = args.spotify_link
+	client_id = args.client_id or SPOTIFY_CLIENT_ID
+	client_secret = args.client_secret or SPOTIFY_CLIENT_SECRET
+	if not client_id or not client_secret:
+		print("Error: No client_id. Pass it with --client-id or set SPOTIPY_CLIENT_ID / SPOTIPY_CLIENT_SECRET environment variables.")
 		return
 	
-	spotify_link = sys.argv[1]
-	
-	song_data = fetch_song_data(spotify_link)
+	song_data = fetch_song_data(spotify_link, client_id=client_id, client_secret=client_secret)
 	if "error" in song_data:
 		print(json.dumps({"error": song_data["error"]}))
 		return

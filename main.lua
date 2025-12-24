@@ -7,6 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local TextChatService = game:GetService("TextChatService")
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SpotifyMusicBot"
@@ -458,16 +459,16 @@ local function isPythonServerRunning()
 	local ok, res = pcall(function()
 		return game:HttpGet(PYTHON_SERVER .. "/health")
 	end)
-	if not ok then
+	if not ok or not res then
 		return false
 	end
 	local success, data = pcall(function()
 		return game:GetService("HttpService"):JSONDecode(res)
 	end)
-	if success and type(data) == "table" and data.status then
+	if success and type(data) == "table" and data.status == "ok" then
 		return true
 	end
-	return true
+	return false
 end
 
 local function startPlaybackMonitor()
@@ -705,6 +706,28 @@ local function stopSong()
 	setStatus("✓ Stopped", Color3.fromRGB(100, 200, 100))
 end
 
+local function skipSong()
+	pcall(function()
+		game:HttpGet(PYTHON_SERVER .. "/stop")
+	end)
+
+	-- small delay to ensure backend stops before starting next
+	task.wait(0.2)
+
+	if #songQueue > 0 then
+		setStatus("⏭ Skipping to next song...", Color3.fromRGB(100, 200, 100))
+		playNextInQueue()
+		pcall(function()
+			safeSendChat("⏭ Skipped to next song.")
+		end)
+	else
+		stopSong()
+		pcall(function()
+			safeSendChat("⏭ Skipped: no more songs, stopped playback.")
+		end)
+	end
+end
+
 local function searchAndPlaySong(songName)
 	if not isPythonServerRunning() then
 		setStatus("Python script is not open!", Color3.fromRGB(200, 100, 100))
@@ -713,7 +736,7 @@ local function searchAndPlaySong(songName)
 	
 	setStatus("Finding the song, please wait.", Color3.fromRGB(200, 200, 100))
 	pcall(function()
-		player:Chat("Finding the song, please wait.")
+		safeSendChat("Finding the song, please wait.")
 	end)
 	
 	local success, result = pcall(function()
@@ -733,7 +756,7 @@ local function searchAndPlaySong(songName)
 	if not decodeOk or not searchData or searchData.error then
 		setStatus("✗ Song not found", Color3.fromRGB(200, 100, 100))
 		pcall(function()
-			player:Chat("Song not found!")
+			safeSendChat("Song not found!")
 		end)
 		return
 	end
@@ -749,7 +772,7 @@ local function searchAndPlaySong(songName)
 	playButton.Visible = true
 	setStatus("Found song! Playing...", Color3.fromRGB(100, 200, 100))
 	pcall(function()
-		player:Chat("Found song! Playing: " .. searchData.title)
+		safeSendChat("Found song! Playing: " .. (searchData.title or ""))
 	end)
 	
 	task.wait(0.5)
@@ -789,14 +812,34 @@ stopButton.MouseButton1Click:Connect(function()
 	stopSong()
 end)
 
+local CHAT_RATE_LIMIT_SECONDS = 5
+local lastChatSentAt = 0
+local function safeSendChat(message)
+	local now = tick()
+	if now - lastChatSentAt < CHAT_RATE_LIMIT_SECONDS then
+		return
+	end
+	lastChatSentAt = now
+
+	pcall(function()
+		local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+		if channel then
+			channel:SendAsync(message)
+		end
+	end)
+end
+
 game:GetService("Players").LocalPlayer.Chatted:Connect(function(message)
+	message = message or ""
+	message = message:match("^%s*(.-)%s*$") or "" -- trim whitespace
+
 	if message:sub(1, 6) == "!play " then
 		local playerName = game:GetService("Players").LocalPlayer.Name
 		
 		if not isPlayerWhitelisted(playerName) then
 			setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
 			pcall(function()
-				player:Chat("You are not whitelisted!")
+				safeSendChat("You are not whitelisted!")
 			end)
 			return
 		end
@@ -807,9 +850,28 @@ game:GetService("Players").LocalPlayer.Chatted:Connect(function(message)
 		else
 			setStatus("✗ Usage: !play [song name]", Color3.fromRGB(200, 100, 100))
 			pcall(function()
-				player:Chat("Usage: !play [song name]")
+				safeSendChat("Usage: !play [song name]")
 			end)
 		end
+	elseif message == "!stop" then
+		local playerName = game:GetService("Players").LocalPlayer.Name
+		if not isPlayerWhitelisted(playerName) then
+			setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
+			pcall(function() safeSendChat("You are not whitelisted!") end)
+			return
+		end
+
+		stopSong()
+		pcall(function() safeSendChat("⏹ Playback stopped.") end)
+	elseif message == "!skip" then
+		local playerName = game:GetService("Players").LocalPlayer.Name
+		if not isPlayerWhitelisted(playerName) then
+			setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
+			pcall(function() safeSendChat("You are not whitelisted!") end)
+			return
+		end
+
+		skipSong()
 	end
 end)
 

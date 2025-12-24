@@ -6,6 +6,24 @@ import threading
 import time
 import os
 from urllib.parse import urlparse, parse_qs
+import shutil
+import logging
+from pathlib import Path
+try:
+	from dotenv import load_dotenv
+	load_dotenv()
+except Exception:
+	env_path = Path(__file__).parent / ".env"
+	if env_path.exists():
+		with open(env_path, "r", encoding="utf-8") as f:
+			for line in f:
+				line = line.strip()
+				if not line or line.startswith("#"):
+					continue
+				if "=" in line:
+					k, v = line.split("=", 1)
+					os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+		print("Loaded .env from project directory")
 
 try:
 	import spotipy
@@ -24,11 +42,27 @@ current_path = None          # currently playing file path
 
 app = Flask(__name__)
 
-WORKSPACE_FOLDER = Path(__file__).parent / "roblox spotify"
-WORKSPACE_FOLDER.mkdir(exist_ok=True)
+# WORKSPACE_FOLDER = Path(__file__).parent / "roblox spotify"
+WORKSPACE_FOLDER = Path(__file__).parent / "fart"
+WORKSPACE_FOLDER.mkdir(parents=True, exist_ok=True)
 
-SPOTIFY_CLIENT_ID = "PLACE_CLIENT_ID_HERE"
-SPOTIFY_CLIENT_SECRET = "PLACE_CLIENT_SECRET_HERE"
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID") or os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET") or os.getenv("SPOTIFY_CLIENT_SECRET")
+
+HOST = os.getenv("HOST", "localhost")
+PORT = int(os.getenv("PORT", "5000"))
+
+def check_dependencies():
+	"""Ensure required external executables are available."""
+	missing = []
+	if shutil.which("ffplay") is None and shutil.which("ffmpeg") is None:
+		missing.append("ffplay/ffmpeg")
+	if missing:
+		logging.error("Missing dependencies: %s. Install ffmpeg/ffplay and ensure they're in PATH.", ", ".join(missing))
+		print(f"Error: Missing dependencies: {', '.join(missing)}. Install ffmpeg/ffplay and ensure they're in PATH.")
+		exit(1)
+
+check_dependencies()
 
 def get_spotify_client():
 	"""Initialize Spotify client"""
@@ -36,6 +70,13 @@ def get_spotify_client():
 		client_id=SPOTIFY_CLIENT_ID,
 		client_secret=SPOTIFY_CLIENT_SECRET
 	)
+	return spotipy.Spotify(auth_manager=auth_manager)
+
+def get_spotify_client_with_creds(client_id, client_secret):
+	"""Return a Spotify client initialized with provided credentials."""
+	if not client_id or not client_secret:
+		raise ValueError("Missing Spotify credentials")
+	auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
 	return spotipy.Spotify(auth_manager=auth_manager)
 
 def extract_track_id(spotify_link):
@@ -46,10 +87,10 @@ def extract_track_id(spotify_link):
 			return parsed_url.path.split("/")[-1].split("?")[0]
 	return None
 
-def fetch_song_data(spotify_link):
+def fetch_song_data(spotify_link, client_id=None, client_secret=None):
 	"""Fetch song metadata from Spotify"""
 	try:
-		sp = get_spotify_client()
+		sp = get_spotify_client_with_creds(client_id or SPOTIFY_CLIENT_ID, client_secret or SPOTIFY_CLIENT_SECRET)
 		track_id = extract_track_id(spotify_link)
 		
 		if not track_id:
@@ -118,11 +159,15 @@ def health():
 def fetch():
 	"""Fetch song data and download from YouTube"""
 	link = request.args.get("link")
+	client_id = request.args.get("client_id") or SPOTIFY_CLIENT_ID
+	client_secret = request.args.get("client_secret") or SPOTIFY_CLIENT_SECRET
+	if not client_id or not client_secret:
+		return jsonify({"error": "No client_id. Pass client_id & client_secret query params or set SPOTIPY_CLIENT_ID/SPOTIPY_CLIENT_SECRET environment variables."}), 400
 	
 	if not link:
 		return jsonify({"error": "No link provided"}), 400
 	
-	song_data = fetch_song_data(link)
+	song_data = fetch_song_data(link, client_id=client_id, client_secret=client_secret)
 	if "error" in song_data:
 		return jsonify(song_data), 400
 	
@@ -356,6 +401,6 @@ def search():
 		return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-	print("🎵 Spotify Music Bot Server running on http://localhost:5000")
-	print("Install Python backend: pip install flask spotipy yt-dlp")
-	app.run(host="localhost", port=5000, debug=False)
+	print(f"🎵 Spotify Music Bot Server running on http://{HOST}:{PORT}")
+	print("Ensure SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET are set in the environment, or pass client_id & client_secret with /fetch.")
+	app.run(host=HOST, port=PORT, debug=False)
