@@ -212,9 +212,15 @@ def play():
 			current_process = subprocess.Popen(
 				cmd,
 				stdin=subprocess.PIPE,
-				stdout=subprocess.DEVNULL,
-				stderr=subprocess.DEVNULL
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE
 			)
+			
+			time.sleep(0.2)
+			if current_process.poll() is not None:
+				err = current_process.stderr.read().decode("utf-8", errors="ignore") if current_process.stderr else ""
+				current_process = None
+				return jsonify({"error": "ffplay failed to start", "stderr": err}), 500
 			
 			playback_start_time = time.time() - paused_offset
 			is_paused = False
@@ -280,9 +286,15 @@ def resume():
 			current_process = subprocess.Popen(
 				cmd,
 				stdin=subprocess.PIPE,
-				stdout=subprocess.DEVNULL,
-				stderr=subprocess.DEVNULL
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE
 			)
+			
+			time.sleep(0.2)
+			if current_process.poll() is not None:
+				err = current_process.stderr.read().decode("utf-8", errors="ignore") if current_process.stderr else ""
+				current_process = None
+				return jsonify({"error": "ffplay failed to start", "stderr": err}), 500
 			
 			playback_start_time = time.time() - paused_offset
 			is_paused = False
@@ -402,5 +414,6 @@ def search():
 
 if __name__ == "__main__":
 	print(f"🎵 Spotify Music Bot Server running on http://{HOST}:{PORT}")
+	print("Tip: To route output into Roblox Voice Chat, install a virtual audio cable (e.g., VB-Audio Cable), set the virtual cable as the system default playback device, then select the cable as the microphone/input in Roblox settings.")
 	print("Ensure SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET are set in the environment, or pass client_id & client_secret with /fetch.")
 	app.run(host=HOST, port=PORT, debug=False)

@@ -734,10 +734,7 @@ local function searchAndPlaySong(songName)
 		return
 	end
 	
-	setStatus("Finding the song, please wait.", Color3.fromRGB(200, 200, 100))
-	pcall(function()
-		safeSendChat("Finding the song, please wait.")
-	end)
+	setStatus("Finding " .. songName .. "... Please wait.", Color3.fromRGB(200, 200, 100))
 	
 	local success, result = pcall(function()
 		return game:HttpGet(PYTHON_SERVER .. "/search?query=" .. game:GetService("HttpService"):UrlEncode(songName))
@@ -770,9 +767,9 @@ local function searchAndPlaySong(songName)
 	end
 	
 	playButton.Visible = true
-	setStatus("Found song! Playing...", Color3.fromRGB(100, 200, 100))
+	setStatus("Successfully found the song! Playing now...", Color3.fromRGB(100, 200, 100))
 	pcall(function()
-		safeSendChat("Found song! Playing: " .. (searchData.title or ""))
+		safeSendChat("Successfully found the song! Playing now...")
 	end)
 	
 	task.wait(0.5)
@@ -829,54 +826,100 @@ local function safeSendChat(message)
 	end)
 end
 
-game:GetService("Players").LocalPlayer.Chatted:Connect(function(message)
-	message = message or ""
-	message = message:match("^%s*(.-)%s*$") or "" -- trim whitespace
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local function chatMessage(str)
+	str = tostring(str)
+	if TextChatService and TextChatService.TextChannels and TextChatService.TextChannels:FindFirstChild("RBXGeneral") then
+		pcall(function() TextChatService.TextChannels.RBXGeneral:SendAsync(str) end)
+	else
+		pcall(function()
+			if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") and ReplicatedStorage.DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest") then
+				ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(str, "All")
+			end
+		end)
+	end
+end
 
-	if message:sub(1, 6) == "!play " then
-		local playerName = game:GetService("Players").LocalPlayer.Name
-		
-		if not isPlayerWhitelisted(playerName) then
-			setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
-			pcall(function()
-				safeSendChat("You are not whitelisted!")
-			end)
+local function handleChatCommand(speakerName, message)
+	message = message or ""
+	message = message:match("^%s*(.-)%s*$") or ""
+	local lower = message:lower()
+
+	local function notWhitelisted()
+		setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
+		pcall(function() safeSendChat("You are not whitelisted!") end)
+	end
+
+	if lower:sub(1,6) == "!play " or lower == "!play" then
+		if not isPlayerWhitelisted(speakerName) then
+			notWhitelisted()
 			return
 		end
-		
-		local songName = message:sub(7)
+		local songName = (message:sub(7) or ""):match("^%s*(.-)%s*$") or ""
 		if songName ~= "" then
+			pcall(function() safeSendChat("Finding " .. songName .. "... Please wait.") end)
 			searchAndPlaySong(songName)
 		else
 			setStatus("✗ Usage: !play [song name]", Color3.fromRGB(200, 100, 100))
-			pcall(function()
-				safeSendChat("Usage: !play [song name]")
-			end)
+			pcall(function() safeSendChat("Usage: !play [song name]") end)
 		end
-	elseif message == "!stop" then
-		local playerName = game:GetService("Players").LocalPlayer.Name
-		if not isPlayerWhitelisted(playerName) then
-			setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
-			pcall(function() safeSendChat("You are not whitelisted!") end)
+	elseif lower == "!stop" then
+		if not isPlayerWhitelisted(speakerName) then
+			notWhitelisted()
 			return
 		end
-
 		stopSong()
 		pcall(function() safeSendChat("⏹ Playback stopped.") end)
-	elseif message == "!skip" then
-		local playerName = game:GetService("Players").LocalPlayer.Name
-		if not isPlayerWhitelisted(playerName) then
-			setStatus("✗ You are not whitelisted for this command!", Color3.fromRGB(200, 100, 100))
-			pcall(function() safeSendChat("You are not whitelisted!") end)
+	elseif lower == "!pause" then
+		if not isPlayerWhitelisted(speakerName) then
+			notWhitelisted()
 			return
 		end
-
+		pauseSong()
+		pcall(function() safeSendChat("⏸ Playback paused.") end)
+	elseif lower == "!resume" then
+		if not isPlayerWhitelisted(speakerName) then
+			notWhitelisted()
+			return
+		end
+		if not isPaused then
+			setStatus("✗ No song is paused", Color3.fromRGB(200, 100, 100))
+			pcall(function() safeSendChat("No song is paused.") end)
+			return
+		end
+		playSong()
+		pcall(function() safeSendChat("▶ Resumed playback.") end)
+	elseif lower == "!skip" then
+		if not isPlayerWhitelisted(speakerName) then
+			notWhitelisted()
+			return
+		end
 		skipSong()
+		pcall(function() safeSendChat("⏭ Skipped to next song.") end)
 	end
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+	pcall(function()
+		plr.Chatted:Connect(function(msg) handleChatCommand(plr.Name, msg) end)
+	end)
+end
+Players.PlayerAdded:Connect(function(plr)
+	pcall(function()
+		plr.Chatted:Connect(function(msg) handleChatCommand(plr.Name, msg) end)
+	end)
 end)
 
-queueButton.MouseButton1Click:Connect(function()
-	queueFrame.Visible = not queueFrame.Visible
+pcall(function()
+	if TextChatService and TextChatService.OnIncomingMessage then
+		TextChatService.OnIncomingMessage:Connect(function(incomingMsg)
+			local text = incomingMsg and (incomingMsg.Text or incomingMsg.Message or "")
+			local name = incomingMsg and (incomingMsg.FromSpeaker or incomingMsg.SenderName or (incomingMsg.TextSource and incomingMsg.TextSource.Name) or "")
+			if text and name and text ~= "" and name ~= "" then
+				handleChatCommand(name, text)
+			end
+		end)
+	end
 end)
 
 if isPythonServerRunning() then
