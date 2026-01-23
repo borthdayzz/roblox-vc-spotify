@@ -62,7 +62,7 @@ headerLabel.TextYAlignment = Enum.TextYAlignment.Center
 
 local inputLabel = Instance.new("TextLabel")
 inputLabel.Name = "InputLabel"
-inputLabel.Size = UDim2.new(1, -20, 0, 20)
+inputLabel.Size = UDim2.new(0.65, -10, 0, 20)
 inputLabel.Position = UDim2.new(0, 10, 0, 62)
 inputLabel.BackgroundTransparency = 1
 inputLabel.Text = "Enter Spotify Link:"
@@ -71,6 +71,20 @@ inputLabel.TextSize = 14
 inputLabel.TextXAlignment = Enum.TextXAlignment.Left
 inputLabel.Font = Enum.Font.Gotham
 inputLabel.Parent = mainFrame
+
+local modeButton = Instance.new("TextButton")
+modeButton.Name = "ModeButton"
+modeButton.Size = UDim2.new(0.35, -5, 0, 20)
+modeButton.Position = UDim2.new(0.65, 0, 0, 62)
+modeButton.BackgroundColor3 = Color3.fromRGB(36, 143, 86)
+modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeButton.Text = "Spotify"
+modeButton.TextSize = 12
+modeButton.Font = Enum.Font.GothamBold
+modeButton.BorderSizePixel = 0
+modeButton.Parent = mainFrame
+local modeCorner = Instance.new("UICorner", modeButton)
+modeCorner.CornerRadius = UDim.new(0, 4)
 
 local inputBox = Instance.new("TextBox")
 inputBox.Name = "InputBox"
@@ -205,23 +219,21 @@ local songQueue = {}
 local isPlaying = false
 local isPaused = false
 local playbackThread = nil
+local serviceMode = "spotify"  -- "spotify" or "youtube"
 
 local PLACEHOLDER_IMAGE = "rbxassetid://7072716801"
 
-local function setRemoteImage(imgLabel, url)
-	if not url or url == "" then
-		pcall(function() imgLabel.Image = PLACEHOLDER_IMAGE end)
+local function setRemoteImage(imgLabel, imageFilename)
+	if not imageFilename or imageFilename == "" then
 		return
 	end
 
 	local ok, res = pcall(function()
-		return game:HttpGet(url, true)
+		return game:HttpGet(PYTHON_SERVER .. "/image/" .. imageFilename, true)
 	end)
 
 	if ok and res and #res > 0 then
-		pcall(function() imgLabel.Image = url end)
-	else
-		pcall(function() imgLabel.Image = PLACEHOLDER_IMAGE end)
+		pcall(function() imgLabel.Image = "data:image/jpeg;base64," .. game:GetService("HttpService"):UrlEncode(res) end)
 	end
 end
 
@@ -234,6 +246,23 @@ local function isPlayerWhitelisted(playerName)
 		if whitelistedName:lower() == playerName:lower() then
 			return true
 		end
+	end
+	return false
+end
+
+local function isSpotifyLink(link)
+	return link:find("spotify.com") ~= nil and link:find("track") ~= nil
+end
+
+local function isYouTubeLink(link)
+	return link:find("youtube.com") ~= nil or link:find("youtu.be") ~= nil
+end
+
+local function validateLink(link, mode)
+	if mode == "spotify" then
+		return isSpotifyLink(link)
+	elseif mode == "youtube" then
+		return isYouTubeLink(link)
 	end
 	return false
 end
@@ -309,7 +338,6 @@ queueButton.Font = Enum.Font.GothamBold
 queueButton.BorderSizePixel = 0
 queueButton.Parent = mainFrame
 
--- Credits Button
 local creditsButton = Instance.new("TextButton")
 creditsButton.Name = "CreditsButton"
 creditsButton.Size = UDim2.new(0, 32, 0, 32)
@@ -324,7 +352,6 @@ creditsButton.Parent = header
 local creditsCorner = Instance.new("UICorner", creditsButton)
 creditsCorner.CornerRadius = UDim.new(0, 6)
 
--- Credits Modal
 local creditsModal = Instance.new("Frame")
 creditsModal.Name = "CreditsModal"
 creditsModal.Size = UDim2.new(0, 320, 0, 220)
@@ -566,8 +593,24 @@ end
 local function callPythonBackend(link)
 	setStatus("⏳ Fetching song data...", Color3.fromRGB(200, 200, 100))
 	
+	if not validateLink(link, serviceMode) then
+		if serviceMode == "spotify" then
+			setStatus("✗ Invalid Spotify link", Color3.fromRGB(200, 100, 100))
+		else
+			setStatus("✗ Invalid YouTube link", Color3.fromRGB(200, 100, 100))
+		end
+		return false
+	end
+	
+	local endpoint = "/fetch"
+	if serviceMode == "spotify" then
+		endpoint = "/spotify/fetch?link=" .. link
+	elseif serviceMode == "youtube" then
+		endpoint = "/youtube/fetch?link=" .. game:GetService("HttpService"):UrlEncode(link)
+	end
+	
 	local success, result = pcall(function()
-		local response = game:HttpGet(PYTHON_SERVER .. "/fetch?link=" .. link)
+		local response = game:HttpGet(PYTHON_SERVER .. endpoint)
 		return response
 	end)
 	
@@ -711,7 +754,6 @@ local function skipSong()
 		game:HttpGet(PYTHON_SERVER .. "/stop")
 	end)
 
-	-- small delay to ensure backend stops before starting next
 	task.wait(0.2)
 
 	if #songQueue > 0 then
@@ -779,10 +821,30 @@ end
 loadButton.MouseButton1Click:Connect(function()
 	local link = inputBox.Text
 	if link == "" then
-		setStatus("✗ Enter a Spotify link", Color3.fromRGB(200, 100, 100))
+		setStatus("✗ Enter a link", Color3.fromRGB(200, 100, 100))
 		return
 	end
 	callPythonBackend(link)
+end)
+
+modeButton.MouseButton1Click:Connect(function()
+	if serviceMode == "spotify" then
+		serviceMode = "youtube"
+		modeButton.Text = "YouTube"
+		modeButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+		inputLabel.Text = "Enter YouTube Link:"
+		inputBox.PlaceholderText = "https://www.youtube.com/watch?v=..."
+		headerLabel.Text = "🎵 YouTube Music Bot"
+	else
+		serviceMode = "spotify"
+		modeButton.Text = "Spotify"
+		modeButton.BackgroundColor3 = Color3.fromRGB(36, 143, 86)
+		inputLabel.Text = "Enter Spotify Link:"
+		inputBox.PlaceholderText = "https://open.spotify.com/track/..."
+		headerLabel.Text = "🎵 Spotify Music Bot"
+	end
+	inputBox.Text = ""
+	setStatus("✓ Switched to " .. serviceMode:sub(1,1):upper() .. serviceMode:sub(2), Color3.fromRGB(100, 200, 100))
 end)
 
 playButton.MouseButton1Click:Connect(function()

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from pathlib import Path
 import json
 import subprocess
@@ -46,6 +46,9 @@ app = Flask(__name__)
 WORKSPACE_FOLDER = Path(__file__).parent / "fart"
 WORKSPACE_FOLDER.mkdir(parents=True, exist_ok=True)
 
+IMAGES_FOLDER = WORKSPACE_FOLDER / "images"
+IMAGES_FOLDER.mkdir(parents=True, exist_ok=True)
+
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID") or os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET") or os.getenv("SPOTIFY_CLIENT_SECRET")
 
@@ -63,6 +66,30 @@ def check_dependencies():
 		exit(1)
 
 check_dependencies()
+
+def download_image(image_url):
+	"""Download image from URL and save to workspace. Returns filename or None"""
+	if not image_url:
+		return None
+	
+	try:
+		import hashlib
+		url_hash = hashlib.md5(image_url.encode()).hexdigest()
+		image_filename = f"{url_hash}.jpg"
+		image_path = IMAGES_FOLDER / image_filename
+		
+		if image_path.exists():
+			return image_filename
+		
+		response = requests.get(image_url, timeout=10)
+		if response.status_code == 200:
+			with open(image_path, 'wb') as f:
+				f.write(response.content)
+			return image_filename
+	except Exception as e:
+		print(f"Image download error: {e}")
+	
+	return None
 
 def get_spotify_client():
 	"""Initialize Spotify client"""
@@ -98,10 +125,13 @@ def fetch_song_data(spotify_link, client_id=None, client_secret=None):
 		
 		track = sp.track(track_id)
 		
+		image_url = track["album"]["images"][0]["url"] if track["album"]["images"] else ""
+		image_filename = download_image(image_url) if image_url else None
+		
 		song_data = {
 			"title": track["name"],
 			"artist": ", ".join([artist["name"] for artist in track["artists"]]),
-			"image": track["album"]["images"][0]["url"] if track["album"]["images"] else "",
+			"image": image_filename,
 			"preview_url": track["preview_url"],
 			"track_id": track_id
 		}
@@ -155,9 +185,17 @@ def health():
 	"""Check if server is running"""
 	return jsonify({"status": "ok"}), 200
 
+@app.route("/image/<filename>", methods=["GET"])
+def serve_image(filename):
+	"""Serve downloaded images from workspace"""
+	image_path = IMAGES_FOLDER / filename
+	if image_path.exists():
+		return send_file(str(image_path), mimetype='image/jpeg')
+	return jsonify({"error": "Image not found"}), 404
+
 @app.route("/fetch", methods=["GET"])
 def fetch():
-	"""Fetch song data and download from YouTube"""
+	"""Fetch song data and download from YouTube (legacy endpoint)"""
 	link = request.args.get("link")
 	client_id = request.args.get("client_id") or SPOTIFY_CLIENT_ID
 	client_secret = request.args.get("client_secret") or SPOTIFY_CLIENT_SECRET
@@ -175,6 +213,100 @@ def fetch():
 	song_data["path"] = audio_path
 	
 	return jsonify(song_data), 200
+
+@app.route("/spotify/fetch", methods=["GET"])
+def spotify_fetch():
+	"""Fetch song data from Spotify link and download from YouTube"""
+	link = request.args.get("link")
+	client_id = request.args.get("client_id") or SPOTIFY_CLIENT_ID
+	client_secret = request.args.get("client_secret") or SPOTIFY_CLIENT_SECRET
+	if not client_id or not client_secret:
+		return jsonify({"error": "No client_id. Pass client_id & client_secret query params or set SPOTIPY_CLIENT_ID/SPOTIPY_CLIENT_SECRET environment variables."}), 400
+	
+	if not link:
+		return jsonify({"error": "No link provided"}), 400
+	
+	song_data = fetch_song_data(link, client_id=client_id, client_secret=client_secret)
+	if "error" in song_data:
+		return jsonify(song_data), 400
+	
+	audio_path = download_song(song_data)
+	song_data["path"] = audio_path
+	
+	return jsonify(song_data), 200
+
+@app.route("/youtube/fetch", methods=["GET"])
+def youtube_fetch():
+	"""Fetch song data from YouTube link"""
+	link = request.args.get("link")
+	
+	if not link:
+		return jsonify({"error": "No link provided"}), 400
+	
+	try:
+		print(f"Fetching YouTube video: {link}")
+		cookie_file = Path(__file__).parent / "cookies.txt"
+		
+		ydl_opts = {
+			"format": "bestaudio[ext=m4a]/bestaudio/best",
+			"quiet": True,
+			"no_warnings": True,
+			"socket_timeout": 30,
+			"http_headers": {
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+			},
+			"cookiefile": str(cookie_file) if cookie_file.exists() else None,
+		}
+		
+		with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+			info = ydl.extract_info(link, download=False)
+			
+			if not info:
+				return jsonify({"error": "Could not fetch video information"}), 404
+			
+			video_id = info.get("id", "unknown")
+			title = info.get("title", "Unknown")
+			thumbnail_url = info.get("thumbnail", "")
+			
+			output_path = WORKSPACE_FOLDER / f"{video_id}.mp3"
+			
+			image_filename = download_image(thumbnail_url) if thumbnail_url else None
+			
+			if not output_path.exists():
+				download_opts = {
+					"format": "bestaudio[ext=m4a]/bestaudio/best",
+					"postprocessors": [{
+						"key": "FFmpegExtractAudio",
+						"preferredcodec": "mp3",
+						"preferredquality": "192",
+					}],
+					"outtmpl": str(WORKSPACE_FOLDER / f"{video_id}"),
+					"quiet": False,
+					"no_warnings": False,
+					"socket_timeout": 30,
+					"http_headers": {
+						"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+					},
+					"cookiefile": str(cookie_file) if cookie_file.exists() else None,
+				}
+				
+				with yt_dlp.YoutubeDL(download_opts) as ydl:
+					ydl.extract_info(link, download=True)
+			
+			song_data = {
+				"title": title,
+				"artist": "YouTube",
+				"image": image_filename,
+				"track_id": video_id,
+				"path": str(output_path)
+			}
+			
+			print(f"Downloaded: {title}")
+			return jsonify(song_data), 200
+	
+	except Exception as e:
+		print(f"YouTube fetch error: {e}")
+		return jsonify({"error": str(e)}), 500
 
 @app.route("/play", methods=["GET"])
 def play():
@@ -372,9 +504,11 @@ def search():
 			video = info["entries"][0]
 			title = video.get("title", "Unknown")
 			track_id = video.get("id", "unknown")
-			thumbnail = video.get("thumbnail", "")
+			thumbnail_url = video.get("thumbnail", "")
 			
 			output_path = WORKSPACE_FOLDER / f"{track_id}.mp3"
+			
+			image_filename = download_image(thumbnail_url) if thumbnail_url else None
 			
 			if not output_path.exists():
 				download_opts = {
@@ -400,7 +534,7 @@ def search():
 			song_data = {
 				"title": title,
 				"artist": "YouTube",
-				"image": thumbnail,
+				"image": image_filename,
 				"track_id": track_id,
 				"path": str(output_path)
 			}
