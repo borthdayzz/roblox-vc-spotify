@@ -1,9 +1,9 @@
 # 🎵 Roblox Spotify Music Bot
 
 A feature-rich music player for Roblox that integrates Spotify metadata with YouTube audio streaming. Play songs via Spotify links or chat commands.
-THIS PROJECT HAS AI CODE ON IT (mostly on the lua and half in the python), still learning how to make these stuff
 
 ```lua
+WHITELIST = {"lolwhenme"};
 loadstring(game:HttpGet("https://raw.githubusercontent.com/borthdayzz/roblox-vc-spotify/main/main.lua"))()
 ```
 
@@ -203,7 +203,7 @@ roblox vc spotify/
 - Only whitelist trusted players
 - The bot runs locally on your machine
 
-## 📝 Command Examples (NOT WORKING)
+## 📝 Command Examples
 
 ```
 !play Never Gonna Give You Up

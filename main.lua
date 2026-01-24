@@ -224,22 +224,29 @@ local serviceMode = "spotify"  -- "spotify" or "youtube"
 local PLACEHOLDER_IMAGE = "rbxassetid://7072716801"
 
 local function setRemoteImage(imgLabel, imageFilename)
-	if not imageFilename or imageFilename == "" then
+	if not imgLabel or not imageFilename or imageFilename == "" then
 		return
 	end
 
-	local ok, res = pcall(function()
-		return game:HttpGet(PYTHON_SERVER .. "/image/" .. imageFilename, true)
+	task.spawn(function()
+		local imageUrl = PYTHON_SERVER .. "/image/" .. imageFilename
+		print("[Image Debug] Loading from: " .. imageUrl)
+		
+		local setSuccess, setError = pcall(function()
+			imgLabel.Image = imageUrl
+		end)
+		
+		if not setSuccess then
+			print("[Image Load Error] Failed to set image: " .. (setError or "unknown error"))
+		else
+			print("[Image Debug] Image URL set successfully: " .. imageUrl)
+		end
 	end)
-
-	if ok and res and #res > 0 then
-		pcall(function() imgLabel.Image = "data:image/jpeg;base64," .. game:GetService("HttpService"):UrlEncode(res) end)
-	end
 end
 
-local WHITELIST = {
-	"lolwhenme"
-}
+if not WHITELIST then
+	WHITELIST = {"lolwhenme"}
+end
 
 local function isPlayerWhitelisted(playerName)
 	for _, whitelistedName in ipairs(WHITELIST) do

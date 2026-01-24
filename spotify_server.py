@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 import os
+import requests
 from urllib.parse import urlparse, parse_qs
 import shutil
 import logging
@@ -49,6 +50,14 @@ WORKSPACE_FOLDER.mkdir(parents=True, exist_ok=True)
 IMAGES_FOLDER = WORKSPACE_FOLDER / "images"
 IMAGES_FOLDER.mkdir(parents=True, exist_ok=True)
 
+@app.after_request
+def add_cors_headers(response):
+	response.headers['Access-Control-Allow-Origin'] = '*'
+	response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+	response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+	response.headers['Cache-Control'] = 'public, max-age=86400'
+	return response
+
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID") or os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET") or os.getenv("SPOTIFY_CLIENT_SECRET")
 
@@ -74,6 +83,8 @@ def download_image(image_url):
 	
 	try:
 		import hashlib
+		IMAGES_FOLDER.mkdir(parents=True, exist_ok=True)
+		
 		url_hash = hashlib.md5(image_url.encode()).hexdigest()
 		image_filename = f"{url_hash}.jpg"
 		image_path = IMAGES_FOLDER / image_filename
@@ -85,6 +96,7 @@ def download_image(image_url):
 		if response.status_code == 200:
 			with open(image_path, 'wb') as f:
 				f.write(response.content)
+			print(f"Downloaded image: {image_filename}")
 			return image_filename
 	except Exception as e:
 		print(f"Image download error: {e}")
