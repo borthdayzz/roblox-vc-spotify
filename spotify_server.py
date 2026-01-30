@@ -103,6 +103,23 @@ def download_image(image_url):
 	
 	return None
 
+def clean_youtube_url(url):
+	"""Extract video ID from YouTube URL and return clean URL, removing extra parameters"""
+	try:
+		parsed_url = urlparse(url)
+		if "youtube.com" in parsed_url.netloc:
+			query_params = parse_qs(parsed_url.query)
+			if "v" in query_params:
+				video_id = query_params["v"][0]
+				return f"https://www.youtube.com/watch?v={video_id}"
+		elif "youtu.be" in parsed_url.netloc:
+			video_id = parsed_url.path.lstrip("/").split("?")[0]
+			return f"https://www.youtube.com/watch?v={video_id}"
+	except Exception as e:
+		print(f"URL cleaning error: {e}")
+	
+	return url
+
 def get_spotify_client():
 	"""Initialize Spotify client"""
 	auth_manager = SpotifyClientCredentials(
@@ -254,6 +271,9 @@ def youtube_fetch():
 	
 	if not link:
 		return jsonify({"error": "No link provided"}), 400
+	
+	link = clean_youtube_url(link)
+	print(f"Cleaned link: {link}")
 	
 	try:
 		print(f"Fetching YouTube video: {link}")
